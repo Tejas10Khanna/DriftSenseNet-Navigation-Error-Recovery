@@ -43,14 +43,15 @@ one. `DriftSenseNet` instead:
 ├── README.md                  # this file
 ├── generate_dataset.py        # synthetic DRAM/FinFET dataset generator
 ├── model.py                   # DriftSenseNet architecture
-├── train.py                   # training script (reproduces driftsense_best.pt)
+├── train.py                   # training script
 ├── localize.py                # standalone inference script (run by AMAT)
 ├── weights/
-│   └── driftsense_best.pt     # trained checkpoint
+│   ├── driftsense_best.pt     # original trained checkpoint
+│   └── driftsense_best.pth    # updated trained checkpoint
 ├── requirements.txt
 ├── citations.md               # references for every augmentation/noise choice
 └── eval/
-    ├── training_run.ipynb             # Kaggle training notebook (source of driftsense_best.pt)
+    ├── training_run.ipynb             # Kaggle training notebook (source of weights)
     ├── generate_and_visualize.ipynb   # Kaggle notebook: eval set + benchmark + plots, pretrained-weights path
     ├── kaggle_generate_and_visualize.py  # same as above, as a single paste-in script
     ├── visualize_results.py           # generates the charts + success/failure visuals from CSVs
@@ -58,7 +59,7 @@ one. `DriftSenseNet` instead:
     ├── benchmark_results.csv          # (generated) per-sample predictions + error
     └── plots/                         # (generated) accuracy_by_tolerance.png, error_distribution.png,
                                         #             success_case.png, failure_case.png, heatmap overlays
-```
+'''
 
 ---
 
