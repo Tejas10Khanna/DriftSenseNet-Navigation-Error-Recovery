@@ -51,7 +51,7 @@ one. `DriftSenseNet` instead:
 ├── requirements.txt
 ├── citations.md               # references for every augmentation/noise choice
 └── eval/
-    ├── training_run.ipynb             # Kaggle training notebook (source of weights)
+    ├── training_run.ipynb             # Kaggle training notebook (source of driftsense_best.pt)
     ├── generate_and_visualize.ipynb   # Kaggle notebook: eval set + benchmark + plots, pretrained-weights path
     ├── kaggle_generate_and_visualize.py  # same as above, as a single paste-in script
     ├── visualize_results.py           # generates the charts + success/failure visuals from CSVs
@@ -59,7 +59,7 @@ one. `DriftSenseNet` instead:
     ├── benchmark_results.csv          # (generated) per-sample predictions + error
     └── plots/                         # (generated) accuracy_by_tolerance.png, error_distribution.png,
                                         #             success_case.png, failure_case.png, heatmap overlays
-'''
+```
 
 ---
 
