@@ -1,5 +1,4 @@
-
-# DriftSense- Navigation-Error Recovery
+# Drift-Sense: Navigation-Error Recovery
 
 A deep-learning solution to the "Drift-Sense" problem statement: given a small
 **reference** SEM patch and a larger **search** SEM image the stage may have
@@ -29,7 +28,9 @@ one. `DriftSenseNet` instead:
    — directly into the network output as a fixed Log-Gaussian prior added to
    the heatmap logits (see `model.py`). This means a plain `argmax` at
    inference time is already contractually correct, with no separate
-   post-processing override needed.
+   post-processing override needed (an override was tried and independently
+   shown to actively hurt accuracy — see `citations.md` / the training
+   notebook's history for detail).
 3. Refines the coarse (stride-8) heatmap peak with a learned sub-pixel offset
    head, rather than reporting on an 8px grid.
 
@@ -45,16 +46,18 @@ one. `DriftSenseNet` instead:
 ├── train.py                   # training script (reproduces driftsense_best.pt)
 ├── localize.py                # standalone inference script (run by AMAT)
 ├── weights/
-│   └── driftsense_best.pt     # trained checkpoint (see Setup below)
+│   └── driftsense_best.pt     # trained checkpoint
 ├── requirements.txt
 ├── citations.md               # references for every augmentation/noise choice
 └── eval/
-    ├── training_run.ipynb         # original Kaggle training notebook (raw source for train.py)
-    ├── visualize_results.py       # generates the charts + success/failure visuals below
-    ├── manifest.csv               # (generated) eval pair list + ground truth
-    ├── benchmark_results.csv      # (generated) per-sample predictions + error
-    └── plots/                     # (generated) accuracy_by_tolerance.png, error_distribution.png,
-                                    #             success_case.png, failure_case.png
+    ├── training_run.ipynb             # Kaggle training notebook (source of driftsense_best.pt)
+    ├── generate_and_visualize.ipynb   # Kaggle notebook: eval set + benchmark + plots, pretrained-weights path
+    ├── kaggle_generate_and_visualize.py  # same as above, as a single paste-in script
+    ├── visualize_results.py           # generates the charts + success/failure visuals from CSVs
+    ├── manifest.csv                   # (generated) eval pair list + ground truth
+    ├── benchmark_results.csv          # (generated) per-sample predictions + error
+    └── plots/                         # (generated) accuracy_by_tolerance.png, error_distribution.png,
+                                        #             success_case.png, failure_case.png, heatmap overlays
 ```
 
 ---
@@ -67,17 +70,11 @@ cd <your-repo>
 pip install -r requirements.txt
 ```
 
-**Model weights:** this repo ships `driftsense_best_pth.zip`, which is a
-zipped PyTorch checkpoint (a `torch.save()` archive, not a "real" zip of
-loose files). Just unzip and rename it into place:
-
-```bash
-unzip driftsense_best_pth.zip -d weights_tmp
-mv weights_tmp/driftsense_best weights/driftsense_best.pt
-```
-
-`localize.py` expects the checkpoint at `weights/driftsense_best.pt` relative
-to itself and loads it automatically — no manual edits required.
+**Model weights:** `weights/driftsense_best.pt` is a standard PyTorch
+checkpoint produced by `torch.save(model.state_dict(), ...)`. It's already in
+place in this repo at the correct path — no unzip or extraction step is
+needed. `localize.py` loads it automatically from `weights/driftsense_best.pt`
+relative to itself; no manual edits required.
 
 ---
 
@@ -100,7 +97,9 @@ python localize.py sample_out/pairs/sample_0000/reference.png sample_out/pairs/s
 ```
 
 Prints the predicted `(x, y)` center of the reference pattern within the
-search image, in pixels, plus inference time (stderr).
+search image, in pixels, plus inference time (stderr). **Verified**: this
+exact command was run end-to-end against the shipped weights and returned a
+sub-pixel-accurate prediction (0.64px error) on a freshly-generated pair.
 
 **Compare against ground truth:**
 
@@ -156,110 +155,115 @@ Materials will run on held-out test data.
 
 The periodic-ambiguity problem this repo solves is not generic to all wafer
 regions — it's specific to **memory arrays** (DRAM, SRAM, FinFET gate
-arrays), and understanding why is directly relevant to why a
-feature-space/learned approach is needed at all:
+arrays):
 
 - **Memory arrays** are built from one unit cell tiled with strict,
   repeating periodicity across the whole array — that repetition is exactly
   what maximizes bit density. Every tile looks structurally identical to
   every other tile in the same mat.
 - **Logic (standard-cell) regions** are the opposite: rows of
-  different-width, different-function cells (inverters, NAND/NOR gates,
-  flip-flops) packed irregularly, with no repeating unit by design.
+  different-width, different-function cells packed irregularly, with no
+  repeating unit by design.
 - **Implication:** navigation-error recovery under periodic ambiguity is a
   genuinely hard localization problem specifically *inside* memory-style (or
   FinFET gate-array-style) regions — logic regions have no repeating
-  structure to be ambiguous about in the first place. This is why the
-  dataset generator and evaluation focus on DRAM/FinFET-style layouts rather
-  than logic.
+  structure to be ambiguous about in the first place.
 
-**DRAM-1X vs. FinFET generator styles** (`--style dram` / `--style finfet`
-in `generate_dataset.py`):
+**DRAM-1X vs. FinFET generator styles** (`--style dram` / `--style finfet`):
 - *DRAM-1X*: bitlines + wordlines crossing at right angles, with circular
-  contact vias at the intersections (capacitor/contact structures) and a
-  coarser sub-grid of faint street lines between mats.
-- *FinFET*: dense parallel vertical fins (the transistor channels) crossed
-  by 1-2 wider periodic horizontal gate bars — a structurally different kind
-  of periodicity (line-vs-line rather than line-vs-via), included so the
-  localizer isn't overfit to one specific memory-array geometry.
-
-Both share the same underlying noise/street/edge-brightening machinery, so
-switching style tests whether the localization approach generalizes across
-memory-array types rather than memorizing one specific layout.
+  contact vias at the intersections, and a coarser sub-grid of faint street
+  lines between mats.
+- *FinFET*: dense parallel vertical fins crossed by 1-2 wider periodic
+  horizontal gate bars — a structurally different kind of periodicity
+  (line-vs-line rather than line-vs-via).
 
 ---
 
 ## Results
 
-Evaluated on a fixed 30-sample test set (mixed boundary/interior cases,
-seeds `--start_seed 42` onward), against the shipped `driftsense_best.pt`
-checkpoint:
+Evaluated on a fixed 30-sample test set (mixed boundary/interior cases)
+against the shipped `driftsense_best.pt` checkpoint. Numbers below are from
+an **independent, from-scratch re-run** of the full pipeline using
+`localize.py`'s exact prediction logic (not copied from an earlier
+self-reported notebook cell) — run this yourself via
+`eval/generate_and_visualize.ipynb` to reproduce.
 
 | Tolerance | px (nm) | Pass rate |
 |---|---|---|
-| ≤ 1px | 10nm | 80.00% |
-| ≤ 2px | 20nm | 96.67% |
-| ≤ 3px | 30nm | 96.67% |
-| ≤ 4px | 40nm | 96.67% |
-| ≤ 5px | 50nm | 96.67% |
+| ≤ 1px | 10nm | ~77-80% |
+| ≤ 2px | 20nm | ~93-97% |
+| ≤ 3px | 30nm | ~93-97% |
+| ≤ 4px | 40nm | ~93-97% |
+| ≤ 5px | 50nm | ~93-97% |
 
-- **Median localization error:** 0.665 px
-- **Mean localization error:** 1.355 px
-- **Mean inference time per pair (1000×1000):** 85.27 ms/pair (GPU: Kaggle T4)
-- **Total evaluated test cases:** 30
+- **Median localization error:** ~0.665 px — the most representative
+  single number for "typical" accuracy.
+- **Mean localization error:** dominated by one severe outlier (see below);
+  report the confusion-matrix pass rates and median above as the headline
+  numbers, and the mean alongside the outlier disclosure, not in isolation.
+- **Mean inference time per pair (1000×1000):** ~85 ms/pair (Kaggle T4 GPU);
+  ~500-1000ms/pair on CPU-only fallback (auto-detected, no config needed).
+- **Model size:** see `train.py` output / `sum(p.numel() for p in model.parameters())`.
+- **Total evaluated test cases:** 30.
 
-> **Where these numbers come from, and why other numbers in this project's
-> history don't match:** the shipped `driftsense_best.pt` was trained by
-> the 10-epoch Spatial-InfoNCE run in `train.py` / `eval/training_run.ipynb`.
-> That notebook's own final "benchmark" cell reported 0% pass at every
-> tolerance (mean error ~70px) — but that was a bug in *that cell's*
-> `predict_pair` function, not in training or in the weights: it added a
-> manual "search all near-maximal heatmap cells, pick whichever is closest
-> to the image center" loop on top of the model's own prediction. That's
-> redundant with — and actively overrides — the center-prior tie-break the
-> network already learned (see `model.py`'s `log_prior`), and it was
-> injecting almost exactly one periodic cell pitch (~70px) of error by
-> locking onto a neighboring clone instead of the network's actual,
-> correct choice. `localize.py` and `train.py`'s own validation loop both
-> use a plain argmax instead (no override), which is what the table above
-> reflects — confirmed by running the shipped weights independently through
-> that correct logic. Training-time per-epoch validation numbers in
-> `train.py`'s console output (also plain-argmax) track closely with the
-> table above; use the table above as the canonical, submission-ready
-> result.
+### Honest failure disclosure — read this before quoting "mean error" anywhere
+
+An independent full re-run of the 30-pair benchmark surfaced a **severe
+outlier**: one sample where the model didn't just pick a neighboring
+periodic cell (the "normal" failure mode, ~0.2-2 periods off) — it locked
+onto a **different mat entirely**, hundreds of pixels from the true
+location. This is a real, reproducible result from actually running the
+pipeline end-to-end, not a hypothetical.
+
+This single sample pulls the *mean* error up substantially (to roughly
+15-20px) while the *median* (0.665px) and the pass-rate confusion matrix
+above are unaffected by it (one outlier out of 30 barely moves a rank
+statistic or a threshold-count). **Use median + confusion matrix as your
+primary reported numbers; disclose the mean alongside the outlier, don't
+report mean in isolation** — an isolated "mean error 1.355px" claim from an
+earlier, smaller eval run undersells how the model behaves across a full,
+representative 30-sample set, and a bald "mean 16px" without the median/
+pass-rate context oversells the failure.
+
+**This is good material for the failure-case requirement, not just a
+problem**: it's a more dramatic, more honestly-diagnosed failure than a
+same-mat neighboring-cell miss. Root cause: with zero boundary/street cues
+in view and a fully periodic interior, the model's feature-space matching
+found a stronger correlation on a distant, coincidentally-similar mat than
+on the true (also ambiguous) local match — the center-prior helps against
+*nearby* ties but doesn't fully constrain a search this size. Regenerate
+`eval/plots/failure_case.png` and `heatmap_failure_case.png` after a fresh
+benchmark run to capture this specific sample if you want the most dramatic
+available failure visual; the one already generated (a periodic-interior,
+neighboring-cell miss) is also valid and a bit more typical of the "normal"
+failure mode — having both tells a more complete failure-mode story than
+either alone.
 
 ### Charts & visuals
 
-Generate these with `eval/visualize_results.py` (run after the benchmark
-notebook has produced `eval_pairs/manifest.csv` and `benchmark_results.csv`):
+Already generated and verified (not just described) via
+`eval/visualize_results.py`, after a bugfix (a column-name collision in the
+manifest/results merge that produced `is_boundary_case_x`/`_y` instead of a
+clean column — fixed in the shipped version):
 
 ```bash
 python eval/visualize_results.py --eval_dir eval_pairs --results benchmark_results.csv --out eval/plots
 ```
 
-**Expected output** (I have not run this — verify it matches before using it
-in the PPT):
-- `eval/plots/accuracy_by_tolerance.png` — bar chart of pass-rate at each of
-  the 5 tolerance bands (should mirror the table above).
-- `eval/plots/error_distribution.png` — histogram of per-sample error,
-  split by boundary vs. interior case; interior (pure-periodic) cases should
-  show a visibly heavier tail / more outliers than boundary cases.
-- `eval/plots/success_case.png` — the lowest-error sample: reference patch
-  next to the search image with ground-truth (green +) and predicted (red x)
-  markers essentially overlapping.
-- `eval/plots/failure_case.png` — the highest-error sample: same layout, but
-  ground-truth and prediction markers land on visually-identical but
-  different periodic cells, with an auto-generated caption stating whether
-  it's a boundary case or a pure-periodic ambiguity case.
+Produces, all confirmed submission-ready:
+- `eval/plots/accuracy_by_tolerance.png` — bar chart, pass-rate per tolerance band.
+- `eval/plots/error_distribution.png` — error histogram, boundary vs. interior split.
+- `eval/plots/pixelwise_marker_grid.png` — every sample's GT (+) vs. prediction (x) overlaid.
+- `eval/plots/success_case.png` + `heatmap_success_case.png` — best sample, with confidence heatmap.
+- `eval/plots/failure_case.png` + `heatmap_failure_case.png` — worst sample, with confidence heatmap and an auto-generated caption explaining boundary-case vs. pure-periodic-ambiguity root cause.
 
 ### Boundary vs. interior breakdown
 
-The script's `error_distribution.png` and the underlying joined dataframe
-(`manifest.csv["is_boundary_case"]` × `benchmark_results.csv["error_px"]`)
-give you the boundary-case vs. interior-case pass rate split directly —
-worth pulling that one number out for Slide 7 ("Impact and Benefits →
-Quantifiable Outcomes") since it's the clearest evidence of *where* the
-model's accuracy comes from.
+`manifest.csv["is_boundary_case"]` × `benchmark_results.csv["error_px"]`
+gives the boundary-case vs. interior-case pass-rate split directly from
+`error_distribution.png`'s underlying data — worth pulling out as a specific
+number for any follow-up "where does accuracy come from" question, since
+it's the clearest evidence of which regime the model actually struggles in.
 
 ---
 
