@@ -1,5 +1,5 @@
 
-# DriftSenseNet- Navigation-Error Recovery
+# DriftSense- Navigation-Error Recovery
 
 A deep-learning solution to the "Drift-Sense" problem statement: given a small
 **reference** SEM patch and a larger **search** SEM image the stage may have
