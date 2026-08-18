@@ -46,11 +46,11 @@ one. `DriftSenseNet` instead:
 ├── train.py                   # training script (reproduces driftsense_best.pt)
 ├── localize.py                # standalone inference script (run by AMAT)
 ├── weights/
-│   └── driftsense_best.pt     # trained checkpoint
+│   └── driftsense_best.pth     # trained checkpoint
 ├── requirements.txt
 ├── citations.md               # references for every augmentation/noise choice
 └── eval/
-    ├── training_run.ipynb             # Kaggle training notebook (source of driftsense_best.pt)
+    ├── training_run.ipynb             # Kaggle training notebook (source of driftsense_best.pth)
     ├── generate_and_visualize.ipynb   # Kaggle notebook: eval set + benchmark + plots, pretrained-weights path
     ├── kaggle_generate_and_visualize.py  # same as above, as a single paste-in script
     ├── visualize_results.py           # generates the charts + success/failure visuals from CSVs
@@ -70,10 +70,10 @@ cd <your-repo>
 pip install -r requirements.txt
 ```
 
-**Model weights:** `weights/driftsense_best.pt` is a standard PyTorch
+**Model weights:** `weights/driftsense_best.pth` is a standard PyTorch
 checkpoint produced by `torch.save(model.state_dict(), ...)`. It's already in
 place in this repo at the correct path — no unzip or extraction step is
-needed. `localize.py` loads it automatically from `weights/driftsense_best.pt`
+needed. `localize.py` loads it automatically from `weights/driftsense_best.pth`
 relative to itself; no manual edits required.
 
 ---
